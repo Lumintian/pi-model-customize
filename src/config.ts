@@ -187,15 +187,24 @@ export function mergeConfigs(global: CustomizeConfig, project: CustomizeConfig):
   };
 }
 
-function readConfig(path: string, warnings: string[]): CustomizeConfig {
+function readConfig(path: string, warnings: string[]): { config: CustomizeConfig; exists: boolean } {
   try {
-    return parseConfig(readFileSync(path, "utf8"), path);
+    return { config: parseConfig(readFileSync(path, "utf8"), path), exists: true };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      warnings.push(error instanceof Error ? error.message : `${path}: could not read configuration`);
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { config: {}, exists: false };
     }
-    return {};
+    warnings.push(error instanceof Error ? error.message : `${path}: could not read configuration`);
+    return { config: {}, exists: true };
   }
+}
+
+export interface ConfigMeta {
+  globalPath: string;
+  globalExists: boolean;
+  projectPath: string;
+  projectTrusted: boolean;
+  projectExists: boolean;
 }
 
 export function loadConfig(options: {
@@ -203,11 +212,30 @@ export function loadConfig(options: {
   cwd: string;
   projectConfigDir: string;
   projectTrusted: boolean;
-}): { config: CustomizeConfig; warnings: string[] } {
+}): { config: CustomizeConfig; warnings: string[]; meta: ConfigMeta } {
   const warnings: string[] = [];
-  const global = readConfig(join(options.agentDir, CONFIG_RELATIVE_PATH), warnings);
-  // Never even read a project file before pi has granted project trust.
-  const project = options.projectTrusted
-    ? readConfig(join(options.cwd, options.projectConfigDir, CONFIG_RELATIVE_PATH), warnings) : {};
-  return { config: mergeConfigs(global, project), warnings };
+  const globalPath = join(options.agentDir, CONFIG_RELATIVE_PATH);
+  const projectPath = join(options.cwd, options.projectConfigDir, CONFIG_RELATIVE_PATH);
+
+  const globalResult = readConfig(globalPath, warnings);
+  let projectExists = false;
+  let projectConfig: CustomizeConfig = {};
+
+  if (options.projectTrusted) {
+    const projectResult = readConfig(projectPath, warnings);
+    projectConfig = projectResult.config;
+    projectExists = projectResult.exists;
+  }
+
+  return {
+    config: mergeConfigs(globalResult.config, projectConfig),
+    warnings,
+    meta: {
+      globalPath,
+      globalExists: globalResult.exists,
+      projectPath,
+      projectTrusted: options.projectTrusted,
+      projectExists,
+    },
+  };
 }

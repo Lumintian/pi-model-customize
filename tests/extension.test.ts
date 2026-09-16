@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
-import modelCustomize from "../extensions/index.ts";
+import modelCustomize, { formatDiagnostics } from "../extensions/index.ts";
 import { CONFIG_RELATIVE_PATH } from "../src/config.ts";
 import type { CustomizableModel } from "../src/rules.ts";
 
@@ -25,11 +25,13 @@ test("extension lifecycle: startup, new, resume, fork, reload, CLI, selection an
   });
   // Test the real entry point; the harness records host API calls, not provider requests.
   const handlers = new Map<string, (event: any, ctx: ExtensionContext) => unknown>();
+  const commands = new Map<string, { description?: string; handler: (args: string, ctx: any) => Promise<void> }>();
   let thinking: ModelThinkingLevel = "high";
   const calls: ModelThinkingLevel[] = [];
   const warnings: string[] = [];
   const pi = {
     on: (name: string, handler: (event: any, ctx: ExtensionContext) => unknown) => handlers.set(name, handler),
+    registerCommand: (name: string, options: any) => commands.set(name, options),
     getThinkingLevel: () => thinking,
     setThinkingLevel: (value: ModelThinkingLevel) => { calls.push(value); thinking = value; },
   } as unknown as ExtensionAPI;
@@ -84,6 +86,18 @@ test("extension lifecycle: startup, new, resume, fork, reload, CLI, selection an
     writeFileSync(projectPath, '{"modelOverrides":{"gpt-test":{"contextWindow":256000}}}');
     await start("reload");
     assert.equal(m.contextWindow, 256000);
+
+    // Verify diagnostic command execution
+    assert.ok(commands.has("model-customize"));
+    assert.ok(commands.has("mc"));
+    const initialWarnCount = warnings.length;
+    await commands.get("model-customize")!.handler("", ctx as any);
+    assert.equal(warnings.length, initialWarnCount + 1);
+    const diag = warnings[warnings.length - 1];
+    assert.ok(diag.includes("[pi-model-customize] Status:"));
+    assert.ok(diag.includes("• Current Model: test/gpt-test"));
+    assert.ok(diag.includes("Context Window: 256,000"));
+
     rmSync(projectPath);
 
     // Teardown is what makes both config removal and new extension instances reversible.
@@ -96,6 +110,7 @@ test("extension lifecycle: startup, new, resume, fork, reload, CLI, selection an
     assert.deepEqual(calls, ["high"]);
 
     writeConfig({ modelOverrides: { "gpt-test": { maxTokens: 0 } } });
+    warnings.length = 0;
     await start("reload");
     assert.equal(warnings.length, 1);
     assert.ok(warnings[0].includes(path));
@@ -108,3 +123,34 @@ test("extension lifecycle: startup, new, resume, fork, reload, CLI, selection an
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("formatDiagnostics covers untrusted workspace, missing model, and uncustomized model", () => {
+  const meta = {
+    globalPath: "/tmp/global.json",
+    globalExists: false,
+    projectPath: "/tmp/project.json",
+    projectTrusted: false,
+    projectExists: false,
+  };
+  const uncustomized = formatDiagnostics({ model: undefined }, {}, meta, "off");
+  assert.ok(uncustomized.includes("• Global: /tmp/global.json (not found)"));
+  assert.ok(uncustomized.includes("• Project: /tmp/project.json (untrusted workspace, skipped)"));
+  assert.ok(uncustomized.includes("• Current Model: none"));
+
+  const nonReasoningModel = {
+    id: "gpt-mini",
+    provider: "test",
+    name: "Mini",
+    api: "openai-responses" as const,
+    baseUrl: "http://localhost",
+    reasoning: false,
+    input: ["text" as const],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 64000,
+    maxTokens: 4000,
+  };
+  const withModel = formatDiagnostics({ model: nonReasoningModel }, {}, meta, "off");
+  assert.ok(withModel.includes("• Current Model: test/gpt-mini"));
+  assert.ok(withModel.includes("Customized: no"));
+});
+
