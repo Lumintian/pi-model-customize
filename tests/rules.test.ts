@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ModelCustomizer } from "../src/customizer.ts";
-import { applyCustomization, buildThinkingLevelMap, hasCliThinkingOverride, matchesPattern, resolveCustomization, type CustomizableModel } from "../src/rules.ts";
+import { applyCustomization, buildThinkingLevelMap, compilePattern, hasCliThinkingOverride, matchesPattern, resolveCustomization, type CustomizableModel } from "../src/rules.ts";
 
 export function model(patch: Partial<CustomizableModel> = {}): CustomizableModel {
   return {
@@ -25,6 +25,8 @@ test("JSON regexp supports flags and resets state between candidates and calls",
   for (let i = 0; i < 3; i++) assert.ok(matchesPattern(pattern, model()));
   assert.ok(matchesPattern({ regex: "^test/", flags: "y" }, model()));
   assert.equal(matchesPattern({ regex: "^TEST/" }, model()), false);
+  assert.strictEqual(compilePattern(pattern), compilePattern(pattern));
+  assert.strictEqual(compilePattern("gpt-*"), compilePattern("gpt-*"));
 });
 
 test("precedence is first pattern, bare ID, then provider/ID; maps replace as fields", () => {

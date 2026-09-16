@@ -23,14 +23,34 @@ export interface CustomizeConfig {
 }
 export type CustomizableModel = Model<Api>;
 
+const stringPatternCache = new Map<string, RegExp>();
+const objectPatternCache = new WeakMap<object, RegExp>();
+
+export function compilePattern(pattern: ModelPattern): RegExp {
+  if (typeof pattern === "string") {
+    let cached = stringPatternCache.get(pattern);
+    if (!cached) {
+      cached = new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`, "i");
+      stringPatternCache.set(pattern, cached);
+    }
+    return cached;
+  }
+  let cached = objectPatternCache.get(pattern);
+  if (!cached) {
+    cached = new RegExp(pattern.regex, pattern.flags);
+    objectPatternCache.set(pattern, cached);
+  }
+  return cached;
+}
+
 export function matchesPattern(pattern: ModelPattern, model: Pick<CustomizableModel, "id" | "provider">): boolean {
   const candidates = [model.id, `${model.provider}/${model.id}`];
-  const regex = typeof pattern === "string"
-    ? new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`, "i")
-    : new RegExp(pattern.regex, pattern.flags);
+  const regex = compilePattern(pattern);
   return candidates.some((candidate) => {
     regex.lastIndex = 0;
-    return regex.test(candidate);
+    const matched = regex.test(candidate);
+    regex.lastIndex = 0;
+    return matched;
   });
 }
 

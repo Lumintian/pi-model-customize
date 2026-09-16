@@ -121,7 +121,7 @@ cp -i examples/pi-model-customize.json ~/.pi/agent/extensions/pi-model-customize
 首个匹配的模式规则 → modelOverrides[模型 ID] → modelOverrides[provider/模型 ID]
 ```
 
-只采用首个匹配模式，不合并所有匹配模式。精确键区分大小写，与 pi 返回的 ID 一致。
+只采用首个匹配模式，不合并所有匹配模式。精确键区分大小写，与 pi 返回的 ID 一致。模式规则在内部自动预编译并缓存正则实例，带状态标志（如 `g`、`y`）会在每次匹配候选时自动重置 `lastIndex`，避免状态漂移；在无任何规则时会自动短路跳过全量模型扫描。
 
 **作用域不取代精确度优先级：** 全局 `provider/模型 ID` 仍会覆盖项目中的通配规则或裸模型 ID。同一精确键才是项目字段优先。项目 `patternRules: []` 不会删除全局规则；若要压过全局模式，可添加先匹配的项目规则（`config: {}` 可停止该模型继承全局模式，但不会取消精确覆盖）。
 

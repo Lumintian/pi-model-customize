@@ -24,9 +24,15 @@ export default function modelCustomize(pi: ExtensionAPI): void {
     }
 
     // De-duplicate because ctx.model is usually already present in the registry.
-    const models = new Set(ctx.modelRegistry.getAll());
-    if (ctx.model) models.add(ctx.model);
-    for (const model of models) customizer.apply(model);
+    const hasRules = Boolean(
+      (config.patternRules && config.patternRules.length > 0)
+      || (config.modelOverrides && Object.keys(config.modelOverrides).length > 0),
+    );
+    if (hasRules) {
+      const models = new Set(ctx.modelRegistry.getAll());
+      if (ctx.model) models.add(ctx.model);
+      for (const model of models) customizer.apply(model);
+    }
     if (!ctx.model?.reasoning) return;
 
     if ((event.reason === "startup" || event.reason === "new") && !hasCliThinkingOverride(process.argv.slice(2))) {
