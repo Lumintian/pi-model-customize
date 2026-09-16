@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { CONFIG_RELATIVE_PATH, loadConfig, mergeConfigs, parseConfig } from "../src/config.ts";
+import { CONFIG_RELATIVE_PATH, loadConfig, mergeConfigs, parseConfig, stripJsonCommentsAndTrailingCommas } from "../src/config.ts";
 import { resolveCustomization } from "../src/rules.ts";
 
 const current = { id: "gpt-test", provider: "test" };
@@ -95,3 +95,50 @@ test("global/project paths, trust gating, missing files and independent invalid-
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("supports comments, multi-line comments and trailing commas without affecting string literals", () => {
+  const jsonc = `
+    // Configuration file comment
+    {
+      "version": 1,
+      /* multi-line comment:
+         adjust reasoning and tokens
+      */
+      "patternRules": [
+        {
+          // Matches openai models
+          "pattern": "openai/*",
+          "config": {
+            "defaultThinkingLevel": "medium", // inline comment
+          },
+        },
+      ],
+      "modelOverrides": {
+        "gpt-test": {
+          "contextWindow": 128000,
+          "maxTokens": 16000, // trailing comma here
+        },
+      }, // trailing comma on root object
+    }
+  `;
+  const config = parseConfig(jsonc);
+  assert.equal(config.version, 1);
+  assert.equal(config.patternRules?.length, 1);
+  assert.equal(config.patternRules?.[0].pattern, "openai/*");
+  assert.equal(config.modelOverrides?.["gpt-test"]?.maxTokens, 16000);
+
+  // String literals containing comments and commas are preserved
+  const withSpecialStrings = `
+    {
+      "patternRules": [
+        {
+          "pattern": "prefix//not-a-comment/*not-comment*/,still-pattern",
+          "config": {}
+        }
+      ]
+    }
+  `;
+  const parsedSpecial = parseConfig(withSpecialStrings);
+  assert.equal(parsedSpecial.patternRules?.[0].pattern, "prefix//not-a-comment/*not-comment*/,still-pattern");
+});
+

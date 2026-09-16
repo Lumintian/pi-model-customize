@@ -48,7 +48,7 @@ cp -i examples/pi-model-customize.json ~/.pi/agent/extensions/pi-model-customize
 
 ## 配置格式
 
-严格 JSON，不支持注释或尾随逗号。`version` 可省略，提供时必须为 `1`。
+支持标准 JSON 及带注释（`//`、`/* ... */`）和尾随逗号的宽松 JSON（JSONC 格式）。`version` 可省略，提供时必须为 `1`。
 
 ```json
 {

@@ -4,6 +4,90 @@ import { THINKING_LEVELS, type CustomizeConfig, type ModelCustomRule } from "./r
 
 export const CONFIG_RELATIVE_PATH = join("extensions", "pi-model-customize.json");
 
+/** Strip comments and trailing commas from JSONC text while preserving string literals. */
+export function stripJsonCommentsAndTrailingCommas(text: string): string {
+  let result = "";
+  let i = 0;
+  const len = text.length;
+  let inString = false;
+  let isEscaped = false;
+
+  while (i < len) {
+    const ch = text[i];
+
+    if (inString) {
+      result += ch;
+      if (isEscaped) {
+        isEscaped = false;
+      } else if (ch === "\\") {
+        isEscaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      i++;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      isEscaped = false;
+      result += ch;
+      i++;
+      continue;
+    }
+
+    if (ch === "/" && text[i + 1] === "/") {
+      i += 2;
+      while (i < len && text[i] !== "\n" && text[i] !== "\r") i++;
+      continue;
+    }
+
+    if (ch === "/" && text[i + 1] === "*") {
+      i += 2;
+      while (i < len && !(text[i] === "*" && text[i + 1] === "/")) i++;
+      i += 2;
+      continue;
+    }
+
+    if (ch === ",") {
+      let j = i + 1;
+      let isTrailing = false;
+      while (j < len) {
+        const nextChar = text[j];
+        if (nextChar === " " || nextChar === "\t" || nextChar === "\n" || nextChar === "\r") {
+          j++;
+          continue;
+        }
+        if (nextChar === "/" && text[j + 1] === "/") {
+          j += 2;
+          while (j < len && text[j] !== "\n" && text[j] !== "\r") j++;
+          continue;
+        }
+        if (nextChar === "/" && text[j + 1] === "*") {
+          j += 2;
+          while (j < len && !(text[j] === "*" && text[j + 1] === "/")) j++;
+          j += 2;
+          continue;
+        }
+        if (nextChar === "}" || nextChar === "]") {
+          isTrailing = true;
+        }
+        break;
+      }
+
+      if (isTrailing) {
+        i++;
+        continue;
+      }
+    }
+
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
 function fail(path: string, message: string): never {
   throw new Error(`${path}: ${message}`);
 }
@@ -49,9 +133,9 @@ function rule(value: unknown, path: string): void {
 export function parseConfig(text: string, source = "config"): CustomizeConfig {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
-  } catch {
-    fail(source, "invalid JSON (comments and trailing commas are not supported)");
+    parsed = JSON.parse(stripJsonCommentsAndTrailingCommas(text));
+  } catch (error) {
+    fail(source, error instanceof Error ? error.message : "invalid JSON");
   }
   const config = object(parsed, source);
   keys(config, ["version", "patternRules", "modelOverrides"], source);
