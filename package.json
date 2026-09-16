@@ -4,8 +4,8 @@
   "description": "Per-model thinking levels and token limits for pi, configured with global and project JSON files.",
   "type": "module",
   "keywords": ["pi-package", "pi-extension", "models"],
-  "license": "UNLICENSED",
-  "files": ["extensions/", "src/", "examples/", "README.md"],
+  "license": "MIT",
+  "files": ["extensions/", "src/", "examples/", "README.md", "LICENSE"],
   "pi": {
     "extensions": ["./extensions/index.ts"]
   },
