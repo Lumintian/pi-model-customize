@@ -54,7 +54,7 @@ export function matchesPattern(pattern: ModelPattern, model: Pick<CustomizableMo
   });
 }
 
-/** Shallow field merge, matching the original extension (maps/arrays replace as fields). */
+/** Shallow field merge (maps/arrays replace as fields). */
 export function resolveCustomization(
   config: CustomizeConfig,
   model: Pick<CustomizableModel, "id" | "provider">,

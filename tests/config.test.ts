@@ -8,7 +8,7 @@ import { resolveCustomization } from "../src/rules.ts";
 
 const current = { id: "gpt-test", provider: "test" };
 
-test("migrated example preserves all original active rules", () => {
+test("example configuration preserves all expected active rules", () => {
   const config = parseConfig(readFileSync(new URL("../examples/pi-model-customize.json", import.meta.url), "utf8"));
   assert.deepEqual(resolveCustomization(config, { ...current, id: "gpt-5.6-luna" }), {
     allowedThinkingLevels: ["low", "max"], contextWindow: 512000,
