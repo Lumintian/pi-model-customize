@@ -56,9 +56,11 @@ export function buildThinkingLevelMap(
   const result: ThinkingLevelMap = {};
   for (const level of THINKING_LEVELS) {
     const existing = existingMap?.[level];
+    const isExtendedLevel = level === "xhigh" || level === "max";
+    const nativelySupported = existing !== undefined;
     if (!allowed.has(level) || existing === null) {
       result[level] = null;
-    } else if ((level !== "xhigh" && level !== "max") || existing !== undefined) {
+    } else if (!isExtendedLevel || nativelySupported) {
       result[level] = existing ?? level;
     }
   }
