@@ -1,0 +1,31 @@
+{
+  "name": "pi-model-customize",
+  "version": "0.1.0",
+  "description": "Per-model thinking levels and token limits for pi, configured with global and project JSON files.",
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension", "models"],
+  "license": "UNLICENSED",
+  "files": ["extensions/", "src/", "examples/", "README.md"],
+  "pi": {
+    "extensions": ["./extensions/index.ts"]
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,0 +1,7 @@
+node_modules/
+*.tgz
+coverage/
+.planning/
+task_plan.md
+findings.md
+progress.md
