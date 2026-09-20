@@ -6,23 +6,34 @@
 
 ---
 
-## 快速安装
+## 安装
 
-在当前包目录执行：
+需要 Node **22.6+**。已在 pi **0.85.1** 验证。
+
+从 npm 安装（推荐）
 
 ```sh
-# 全局安装至当前用户
-pi install "$PWD"
-
-# 或仅安装到当前项目
-pi install -l "$PWD"
+pi install npm:pi-model-customize
 ```
 
-安装后无需手动编译 TypeScript，pi 会自动通过清单加载入口。已在 pi **0.85.1** 及以上版本验证。
+从 GitHub 安装
+
+```sh
+pi install git:github.com/Lumintian/pi-model-customize@v0.1.0
+```
+
+本地开发，在仓库根目录执行
+
+```sh
+pi install "$PWD"        # 全局
+pi install -l "$PWD"     # 仅当前项目
+```
+
+默认写入用户设置；`-l` 写入当前项目的 `.pi/settings.json`。
 
 ---
 
-## 5 分钟上手配置
+## 快速配置
 
 ### 1. 创建配置文件
 
@@ -36,7 +47,7 @@ pi install -l "$PWD"
 > **提示**：可直接将包内示例复制为全局配置：  
 > `mkdir -p ~/.pi/agent/extensions && cp -i examples/pi-model-customize.json ~/.pi/agent/extensions/pi-model-customize.json`
 
-### 2. 编写配置（支持 JSONC 注释与尾逗号）
+### 2. 编写配置
 
 ```jsonc
 {
@@ -64,13 +75,13 @@ pi install -l "$PWD"
 }
 ```
 
-修改配置后，无需重启终端，在 pi 会话中执行 `/reload` 即可立即生效。
+修改配置后，在 pi 会话中执行 `/reload` 即可立即生效。
 
 ---
 
 ## 状态查询与诊断
 
-在 pi 会话中随时执行 `/mc`（或 `/model-customize`），即可直观查看当前配置加载情况与活动模型的定制状态：
+在 pi 会话中随时执行 `/mc`（或 `/model-customize`），即可查看当前配置加载情况与活动模型的定制状态：
 
 ```text
 /mc
