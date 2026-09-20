@@ -1,6 +1,6 @@
 {
   "name": "pi-model-customize",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Per-model thinking levels and token limits for pi, configured with global and project JSON files.",
   "author": "Lumintian",
   "license": "MIT",
@@ -14,14 +14,27 @@
   },
   "type": "module",
   "packageManager": "pnpm@11.24.0",
-  "keywords": ["pi-package", "pi-extension", "models"],
-  "files": ["extensions/", "src/", "examples/", "docs/", "README.md", "LICENSE"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "models"
+  ],
+  "files": [
+    "extensions/",
+    "src/",
+    "examples/",
+    "docs/",
+    "README.md",
+    "LICENSE"
+  ],
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org"
   },
   "pi": {
-    "extensions": ["./extensions/index.ts"]
+    "extensions": [
+      "./extensions/index.ts"
+    ]
   },
   "engines": {
     "node": ">=22.6.0"
