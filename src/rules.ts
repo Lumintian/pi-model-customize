@@ -59,13 +59,18 @@ export function resolveCustomization(
   config: CustomizeConfig,
   model: Pick<CustomizableModel, "id" | "provider">,
 ): ModelCustomRule | undefined {
-  const pattern = config.patternRules?.find((rule) => matchesPattern(rule.pattern, model))?.config;
+  let patterns: ModelCustomRule | undefined;
+  for (const rule of config.patternRules ?? []) {
+    if (matchesPattern(rule.pattern, model)) {
+      patterns = { ...patterns, ...rule.config };
+    }
+  }
   const own = (key: string) => config.modelOverrides && Object.hasOwn(config.modelOverrides, key)
     ? config.modelOverrides[key] : undefined;
   const exact = own(model.id);
   const provider = own(`${model.provider}/${model.id}`);
-  if (!pattern && !exact && !provider) return undefined;
-  return { ...pattern, ...exact, ...provider };
+  if (!patterns && !exact && !provider) return undefined;
+  return { ...patterns, ...exact, ...provider };
 }
 
 export function buildThinkingLevelMap(

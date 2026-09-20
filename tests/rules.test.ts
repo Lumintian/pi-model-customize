@@ -29,18 +29,23 @@ test("JSON regexp supports flags and resets state between candidates and calls",
   assert.strictEqual(compilePattern("gpt-*"), compilePattern("gpt-*"));
 });
 
-test("precedence is first pattern, bare ID, then provider/ID; maps replace as fields", () => {
+test("all matching patterns merge in order before bare ID and provider/ID; fields replace shallowly", () => {
   const result = resolveCustomization({
     patternRules: [
       { pattern: "*", config: { contextWindow: 100, maxTokens: 10, thinkingLevelMap: { low: "a" } } },
-      { pattern: "*", config: { maxTokens: 99 } },
+      { pattern: "gpt-*", config: { maxTokens: 99, defaultThinkingLevel: "medium" } },
     ],
     modelOverrides: {
       "gpt-test": { contextWindow: 200, thinkingLevelMap: { high: "b" } },
       "test/gpt-test": { contextWindow: 300 },
     },
   }, model());
-  assert.deepEqual(result, { contextWindow: 300, maxTokens: 10, thinkingLevelMap: { high: "b" } });
+  assert.deepEqual(result, {
+    contextWindow: 300,
+    maxTokens: 99,
+    defaultThinkingLevel: "medium",
+    thinkingLevelMap: { high: "b" },
+  });
   assert.equal(resolveCustomization({}, model({ id: "toString" })), undefined);
   assert.equal(resolveCustomization({ modelOverrides: {} }, model({ id: "constructor" })), undefined);
 });

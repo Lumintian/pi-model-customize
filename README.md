@@ -60,20 +60,24 @@ pi install -l "$PWD"     # 仅当前项目
         "allowedThinkingLevels": ["low", "medium", "xhigh", "max"],
       },
     },
+    {
+      "pattern": "gpt-*-luna",
+      "config": {
+        "contextWindow": 512000
+      }
+    }
   ],
   // 2. 精确覆盖：按模型 ID 或 provider/模型 ID 定制
   "modelOverrides": {
-    "gpt-5.6-luna": {
-      "allowedThinkingLevels": ["low", "max"],
-      "contextWindow": 512000, // 调大上下文窗口
-    },
     "openai/gpt-5.6-sol": {
       "defaultThinkingLevel": "xhigh",
-      "maxTokens": 32000,
+      "maxTokens": 272000,
     },
   },
 }
 ```
+
+`patternRules` 会合并所有命中项，并按列表顺序让靠后的规则覆盖同名字段；随后再应用模型 ID 与 `provider/模型ID` 精确覆盖，精确覆盖优先级最高。这样可以先写通用规则，再在下方追加更具体的模式。
 
 修改配置后，在 pi 会话中执行 `/reload` 即可立即生效。
 

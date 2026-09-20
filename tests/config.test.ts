@@ -38,7 +38,7 @@ test("strict validation rejects invalid files with precise source paths", () => 
   assert.doesNotThrow(() => parseConfig('{"patternRules":[{"pattern":{"regex":"gpt","flags":"i"},"config":{}}]}'));
 });
 
-test("project patterns precede global; exact entries merge fields, arrays and maps replace", () => {
+test("global patterns apply before project patterns; later fields and exact entries override shallowly", () => {
   const global = parseConfig(JSON.stringify({
     patternRules: [{ pattern: "*", config: { contextWindow: 100 } }],
     modelOverrides: { "gpt-test": { allowedThinkingLevels: ["low"], thinkingLevelMap: { low: "small" }, maxTokens: 10 } },
@@ -52,6 +52,7 @@ test("project patterns precede global; exact entries merge fields, arrays and ma
     contextWindow: 200, allowedThinkingLevels: ["high"], thinkingLevelMap: { high: "big" }, maxTokens: 10,
   });
   assert.equal(resolveCustomization(merged, { ...current, id: "claude" })?.contextWindow, 100);
+  assert.deepEqual(merged.patternRules?.map((rule) => rule.pattern), ["*", "gpt-*"]);
   assert.equal(global.modelOverrides?.["gpt-test"].thinkingLevelMap?.low, "small");
   assert.equal(mergeConfigs(global, {}).patternRules?.length, 1);
 });

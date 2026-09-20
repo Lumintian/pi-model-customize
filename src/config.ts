@@ -172,7 +172,7 @@ export function parseConfig(text: string, source = "config"): CustomizeConfig {
   return config as CustomizeConfig;
 }
 
-/** Project patterns are searched first. Exact entries merge by field, not recursively. */
+/** Global patterns are applied first so later project matches can override them by field. Exact entries merge by field, not recursively. */
 export function mergeConfigs(global: CustomizeConfig, project: CustomizeConfig): CustomizeConfig {
   const overrides: Record<string, ModelCustomRule> = Object.create(null);
   for (const config of [global, project]) {
@@ -182,7 +182,7 @@ export function mergeConfigs(global: CustomizeConfig, project: CustomizeConfig):
   }
   return {
     version: 1,
-    patternRules: [...(project.patternRules ?? []), ...(global.patternRules ?? [])],
+    patternRules: [...(global.patternRules ?? []), ...(project.patternRules ?? [])],
     modelOverrides: overrides,
   };
 }
