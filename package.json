@@ -1,6 +1,6 @@
 {
   "name": "pi-model-customize",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Per-model thinking levels and token limits for pi, configured with global and project JSON files.",
   "author": "Lumintian",
   "license": "MIT",
