@@ -9,6 +9,14 @@ import modelCustomize, { formatDiagnostics } from "../extensions/index.ts";
 import { CONFIG_RELATIVE_PATH } from "../src/config.ts";
 import type { CustomizableModel } from "../src/rules.ts";
 
+async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for asynchronous reconciliation");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 test("extension lifecycle: startup, new, resume, fork, reload, CLI, selection and teardown", async () => {
   const root = mkdtempSync(join(tmpdir(), "pi-model-extension-"));
   const oldDir = process.env.PI_CODING_AGENT_DIR;
@@ -36,13 +44,22 @@ test("extension lifecycle: startup, new, resume, fork, reload, CLI, selection an
     setThinkingLevel: (value: ModelThinkingLevel) => { calls.push(value); thinking = value; },
   } as unknown as ExtensionAPI;
   const m = makeModel();
+  const entries: any[] = [];
   const ctx = {
     cwd: join(root, "project"), hasUI: true, model: m,
     modelRegistry: { getAll: () => [m] }, isProjectTrusted: () => true,
-    ui: { notify: (message: string) => warnings.push(message) },
+    sessionManager: {
+      getBranch: () => entries,
+      getLeafEntry: () => entries.at(-1),
+    },
+    ui: {
+      notify: (message: string) => warnings.push(message),
+      setStatus: () => {},
+    },
   } as unknown as ExtensionContext;
   const emit = async (name: string, event: unknown) => { await handlers.get(name)!(event, ctx); };
   const start = async (reason: string) => {
+    (ctx as any).model = m;
     thinking = "high";
     calls.length = 0;
     await emit("session_start", { reason });
@@ -68,17 +85,25 @@ test("extension lifecycle: startup, new, resume, fork, reload, CLI, selection an
       thinking = "high";
       calls.length = 0;
       const dynamic = makeModel();
+      (ctx as any).model = dynamic;
       await emit("model_select", { model: dynamic, source });
       assert.equal(dynamic.contextWindow, 512000);
       assert.deepEqual(calls, ["low"]);
     }
     calls.length = 0;
-    await emit("model_select", { model: makeModel(), source: "restore" });
+    const restored = makeModel();
+    (ctx as any).model = restored;
+    await emit("model_select", { model: restored, source: "restore" });
     assert.deepEqual(calls, []);
-    await emit("model_select", { model: { ...makeModel(), reasoning: false }, source: "set" });
+    const nonReasoning = { ...makeModel(), reasoning: false };
+    (ctx as any).model = nonReasoning;
+    await emit("model_select", { model: nonReasoning, source: "set" });
     assert.deepEqual(calls, []);
-    await emit("model_select", { model: { ...makeModel(), id: "other" }, source: "set" });
+    const other = { ...makeModel(), id: "other" };
+    (ctx as any).model = other;
+    await emit("model_select", { model: other, source: "set" });
     assert.deepEqual(calls, [thinking]);
+    (ctx as any).model = m;
 
     // A trusted project's file overrides the same global exact rule by field.
     const projectPath = join(ctx.cwd, ".pi", CONFIG_RELATIVE_PATH);
@@ -117,6 +142,106 @@ test("extension lifecycle: startup, new, resume, fork, reload, CLI, selection an
     assert.equal(m.maxTokens, 16000);
     await emit("session_shutdown", { reason: "quit" });
   } finally {
+    await handlers.get("session_shutdown")?.({ reason: "quit" }, ctx);
+    process.argv = oldArgv;
+    if (oldDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = oldDir;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("reconciles silent model replacement and same-model selection without model_select", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pi-model-reconcile-"));
+  const oldDir = process.env.PI_CODING_AGENT_DIR;
+  const oldArgv = process.argv;
+  process.env.PI_CODING_AGENT_DIR = join(root, "agent");
+  process.argv = ["node", "pi"];
+  const path = join(process.env.PI_CODING_AGENT_DIR, CONFIG_RELATIVE_PATH);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify({
+    modelOverrides: {
+      "gpt-test": { defaultThinkingLevel: "low", contextWindow: 512000 },
+    },
+  }));
+
+  const makeModel = (): CustomizableModel => ({
+    id: "gpt-test", provider: "test", name: "Test", api: "openai-responses", baseUrl: "http://localhost",
+    reasoning: true, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000, maxTokens: 16000,
+  });
+  const handlers = new Map<string, (event: any, ctx: ExtensionContext) => unknown>();
+  let thinking: ModelThinkingLevel = "high";
+  const calls: ModelThinkingLevel[] = [];
+  let renders = 0;
+  let activeModel = makeModel();
+  const initialModel = activeModel;
+  const entries: any[] = [{
+    type: "model_change", id: "initial-model", parentId: null, timestamp: new Date().toISOString(),
+    provider: "test", modelId: "gpt-test",
+  }];
+  const pi = {
+    on: (name: string, handler: (event: any, ctx: ExtensionContext) => unknown) => handlers.set(name, handler),
+    registerCommand: () => {},
+    getThinkingLevel: () => thinking,
+    setThinkingLevel: (value: ModelThinkingLevel) => { calls.push(value); thinking = value; },
+  } as unknown as ExtensionAPI;
+  const ctx = {
+    cwd: join(root, "project"), hasUI: true,
+    get model() { return activeModel; },
+    modelRegistry: { getAll: () => [initialModel] },
+    isProjectTrusted: () => true,
+    sessionManager: {
+      getBranch: () => entries,
+      getLeafEntry: () => entries.at(-1),
+    },
+    ui: {
+      notify: () => {},
+      setStatus: () => { renders++; },
+    },
+  } as unknown as ExtensionContext;
+  const emit = async (name: string, event: unknown) => { await handlers.get(name)!(event, ctx); };
+  let shutdown = false;
+
+  try {
+    modelCustomize(pi);
+    await emit("session_start", { reason: "startup" });
+    assert.equal(initialModel.contextWindow, 512000);
+    assert.equal(thinking, "low");
+
+    // Provider/catalog refresh can silently replace the active object without a model_select event.
+    const refreshedModel = makeModel();
+    activeModel = refreshedModel;
+    const rendersBeforeRefresh = renders;
+    await waitFor(() => refreshedModel.contextWindow === 512000);
+    assert.equal(thinking, "low");
+    assert.ok(renders > rendersBeforeRefresh);
+
+    // Selecting the same provider/model appends a model_change entry, but pi suppresses model_select.
+    const selectedModel = makeModel();
+    entries.push({
+      type: "model_change", id: "same-model-selection", parentId: "initial-model",
+      timestamp: new Date().toISOString(), provider: "test", modelId: "gpt-test",
+    });
+    activeModel = selectedModel;
+    thinking = "high";
+    calls.length = 0;
+    await waitFor(() => selectedModel.contextWindow === 512000 && thinking === "low");
+    assert.ok(calls.includes("low"));
+
+    // A later manual thinking-level change on the same model remains user-owned.
+    thinking = "high";
+    calls.length = 0;
+    await emit("thinking_level_select", { level: "high", previousLevel: "low" });
+    assert.equal(thinking, "high");
+    assert.deepEqual(calls, []);
+
+    await emit("session_shutdown", { reason: "quit" });
+    shutdown = true;
+    assert.equal(initialModel.contextWindow, 128000);
+    assert.equal(refreshedModel.contextWindow, 128000);
+    assert.equal(selectedModel.contextWindow, 128000);
+  } finally {
+    if (!shutdown) await handlers.get("session_shutdown")?.({ reason: "quit" }, ctx);
     process.argv = oldArgv;
     if (oldDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = oldDir;

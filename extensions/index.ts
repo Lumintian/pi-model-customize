@@ -7,7 +7,11 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { loadConfig, type ConfigMeta } from "../src/config.ts";
 import { ModelCustomizer } from "../src/customizer.ts";
+import { ModelReconciler } from "../src/reconciler.ts";
 import { hasCliThinkingOverride, resolveCustomization, type CustomizeConfig } from "../src/rules.ts";
+
+const RECONCILE_INTERVAL_MS = 50;
+const RECONCILE_STATUS_KEY = "pi-model-customize-reconcile";
 
 export function formatDiagnostics(
   ctx: Pick<ExtensionContext, "model">,
@@ -71,6 +75,58 @@ export default function modelCustomize(pi: ExtensionAPI): void {
     projectTrusted: false,
     projectExists: false,
   };
+  let reconciler = new ModelReconciler(customizer);
+  let activeContext: ExtensionContext | undefined;
+  let reconcileTimer: ReturnType<typeof setInterval> | undefined;
+
+  const reconcileActiveModel = (
+    ctx: ExtensionContext,
+    defaultIntent?: boolean,
+    forceSelectionScan = false,
+  ): boolean => {
+    const result = reconciler.reconcile(ctx, {
+      force: defaultIntent !== undefined,
+      forceSelectionScan,
+    });
+    if (!result.model || !result.shouldHandle) return false;
+
+    if (result.model.reasoning) {
+      if (defaultIntent ?? result.selected) {
+        pi.setThinkingLevel(
+          resolveCustomization(config, result.model)?.defaultThinkingLevel ?? pi.getThinkingLevel(),
+        );
+      } else if (defaultIntent === undefined && result.identityChanged) {
+        // Registry/provider refreshes replace model objects without changing session intent.
+        pi.setThinkingLevel(pi.getThinkingLevel());
+      }
+    }
+
+    if ((result.identityChanged || result.applied) && ctx.hasUI) {
+      // Clearing an unused status key is a public, side-effect-free way to request a footer redraw.
+      ctx.ui.setStatus(RECONCILE_STATUS_KEY, undefined);
+    }
+    return true;
+  };
+
+  const stopReconciler = (): void => {
+    if (reconcileTimer) clearInterval(reconcileTimer);
+    reconcileTimer = undefined;
+    activeContext = undefined;
+  };
+
+  const startReconciler = (ctx: ExtensionContext): void => {
+    activeContext = ctx;
+    reconcileTimer = setInterval(() => {
+      if (activeContext !== ctx) return;
+      try {
+        reconcileActiveModel(ctx);
+      } catch {
+        // Session replacement invalidates captured contexts; session_shutdown normally wins this race.
+        if (activeContext === ctx) stopReconciler();
+      }
+    }, RECONCILE_INTERVAL_MS);
+    reconcileTimer.unref();
+  };
 
   const handleDiagnostic = async (_args: string, cmdCtx: ExtensionCommandContext): Promise<void> => {
     const report = formatDiagnostics(cmdCtx, config, lastMeta, pi.getThinkingLevel());
@@ -92,6 +148,7 @@ export default function modelCustomize(pi: ExtensionAPI): void {
   });
 
   pi.on("session_start", (event, ctx) => {
+    stopReconciler();
     customizer.restoreAll();
     const loaded = loadConfig({
       agentDir: getAgentDir(),
@@ -102,6 +159,7 @@ export default function modelCustomize(pi: ExtensionAPI): void {
     config = loaded.config;
     lastMeta = loaded.meta;
     customizer = new ModelCustomizer(config);
+    reconciler = new ModelReconciler(customizer);
     for (const warning of loaded.warnings) {
       const message = `[pi-model-customize] Ignoring invalid config file: ${warning}`;
       if (ctx.hasUI) ctx.ui.notify(message, "warning");
@@ -113,29 +171,36 @@ export default function modelCustomize(pi: ExtensionAPI): void {
       (config.patternRules && config.patternRules.length > 0)
       || (config.modelOverrides && Object.keys(config.modelOverrides).length > 0),
     );
-    if (hasRules) {
-      const models = new Set(ctx.modelRegistry.getAll());
-      if (ctx.model) models.add(ctx.model);
-      for (const model of models) customizer.apply(model);
-    }
-    if (!ctx.model?.reasoning) return;
+    const models = new Set(hasRules ? ctx.modelRegistry.getAll() : []);
+    if (hasRules && ctx.model) models.add(ctx.model);
+    reconciler.initialize(ctx, models);
 
-    if ((event.reason === "startup" || event.reason === "new") && !hasCliThinkingOverride(process.argv.slice(2))) {
-      const level = resolveCustomization(config, ctx.model)?.defaultThinkingLevel;
-      if (level !== undefined) {
-        pi.setThinkingLevel(level);
-        return;
+    if (ctx.model?.reasoning) {
+      if ((event.reason === "startup" || event.reason === "new") && !hasCliThinkingOverride(process.argv.slice(2))) {
+        const level = resolveCustomization(config, ctx.model)?.defaultThinkingLevel;
+        if (level !== undefined) {
+          pi.setThinkingLevel(level);
+        } else {
+          pi.setThinkingLevel(pi.getThinkingLevel());
+        }
+      } else {
+        // Resume, fork and reload retain the current level, clamped to supported levels.
+        pi.setThinkingLevel(pi.getThinkingLevel());
       }
     }
-    // Resume, fork and reload retain the current level, clamped to supported levels.
-    pi.setThinkingLevel(pi.getThinkingLevel());
+    if (hasRules) startReconciler(ctx);
   });
 
-  pi.on("model_select", (event) => {
-    customizer.apply(event.model);
-    if (event.source === "restore" || !event.model.reasoning) return;
-    pi.setThinkingLevel(resolveCustomization(config, event.model)?.defaultThinkingLevel ?? pi.getThinkingLevel());
+  pi.on("thinking_level_select", (_event, ctx) => {
+    reconcileActiveModel(ctx, undefined, true);
   });
 
-  pi.on("session_shutdown", () => customizer.restoreAll());
+  pi.on("model_select", (event, ctx) => {
+    reconcileActiveModel(ctx, event.source === "restore" ? false : true, true);
+  });
+
+  pi.on("session_shutdown", () => {
+    stopReconciler();
+    customizer.restoreAll();
+  });
 }
