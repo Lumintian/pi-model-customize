@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Per-model thinking levels and token limits for pi, configured with global and project JSON files.",
   "type": "module",
+  "packageManager": "pnpm@11.24.0",
   "keywords": ["pi-package", "pi-extension", "models"],
   "license": "MIT",
   "files": ["extensions/", "src/", "examples/", "docs/", "README.md", "LICENSE"],
@@ -15,7 +16,7 @@
   "scripts": {
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm test"
+    "check": "tsc --noEmit && tsx --test tests/*.test.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",

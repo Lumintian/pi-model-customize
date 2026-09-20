@@ -91,18 +91,6 @@ pi install -l "$PWD"
 
 ---
 
-## 开发与验证
-
-本项目采用原生 Node.js 测试与 TypeScript 类型校验：
-
-```sh
-npm ci            # 安装开发依赖
-npm run check     # 运行 TypeScript 类型检查与全部单元测试
-npm pack --dry-run # 验证发布打包内容
-```
-
----
-
 ## 进阶文档
 
 深入规则与实现细节见下：
